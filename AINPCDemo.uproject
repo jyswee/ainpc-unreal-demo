@@ -1,0 +1,23 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.3",
+	"Category": "",
+	"Description": "AINPCEngine Demo — AI-powered NPCs in Unreal Engine",
+	"Modules": [
+		{
+			"Name": "AINPCDemo",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine",
+				"UMG"
+			]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "AINPCEngine",
+			"Enabled": true
+		}
+	]
+}
