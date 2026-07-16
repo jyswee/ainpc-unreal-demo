@@ -647,6 +647,89 @@ struct FStatsResponse
     float Uptime = 0.f;
 };
 
+// ── Voice (TTS) ────────────────────────────────────────────────────────
+
+USTRUCT(BlueprintType)
+struct FSpeakResponse
+{
+    GENERATED_BODY()
+
+    /** Base64-encoded audio payload */
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString Audio;
+
+    /** Audio format (e.g. "wav") */
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString Format;
+
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString Voice;
+
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString Provider;
+
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString NpcId;
+
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString NpcName;
+
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    int32 TextLength = 0;
+};
+
+// ── Errors ─────────────────────────────────────────────────────────────
+
+/**
+ * Structured API error.
+ *
+ * Codes worth handling in-game:
+ *   "payment_required"    (HTTP 402) — account has no active card / trial not
+ *                          started. Send the player of your dashboard to
+ *                          PaymentUrl to add a card (7-day free trial, $0 today).
+ *   "npc_limit"           (HTTP 402) — plan NPC cap reached, upgrade to add more.
+ *   "feature_not_in_plan" (HTTP 402) — endpoint not included in current plan.
+ *   "interaction_cap"     (HTTP 429) — monthly included interactions used up.
+ */
+USTRUCT(BlueprintType)
+struct FAINPCError
+{
+    GENERATED_BODY()
+
+    /** HTTP status code (0 = network/transport failure) */
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    int32 HttpStatus = 0;
+
+    /** Machine-readable error code, e.g. "payment_required", "npc_limit", "interaction_cap" */
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString Code;
+
+    /** Human-readable error message */
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString Message;
+
+    /** Where to resolve billing issues (set on 402 payment_required and plan-limit errors) */
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString PaymentUrl;
+};
+
+// ── WebSocket ──────────────────────────────────────────────────────────
+
+USTRUCT(BlueprintType)
+struct FNPCStateUpdate
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString NpcId;
+
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FAINPCMood Mood;
+
+    UPROPERTY(BlueprintReadWrite, Category = "AINPCEngine")
+    FString Location;
+};
+
 // ── Health ─────────────────────────────────────────────────────────────
 
 USTRUCT(BlueprintType)

@@ -13,7 +13,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBatchGenerated, FGenerateBatchRes
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnStatsReceived, FStatsResponse, Stats);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHealthReceived, FHealthResponse, Health);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnNPCDeleted);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNPCSpeak, FSpeakResponse, Speech);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNPCError, FString, Error);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNPCApiError, FAINPCError, Error);
 
 UCLASS(BlueprintType, Blueprintable)
 class AINPCENGINE_API UNPCEngineClient : public UObject
@@ -87,6 +89,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "AINPCEngine")
     void NPCInteraction(const FString& NpcId, const FString& OtherNpcId, const FString& Message, const FGameContext& Context);
 
+    // ── Voice (TTS) ─────────────────────────────────────────────────
+
+    /** Generate spoken audio for NPC dialogue. Broadcasts OnSpeak with base64 audio. Requires a Voice add-on. */
+    UFUNCTION(BlueprintCallable, Category = "AINPCEngine")
+    void Speak(const FString& NpcId, const FString& Text);
+
     // ── Generation ──────────────────────────────────────────────────
 
     UFUNCTION(BlueprintCallable, Category = "AINPCEngine")
@@ -130,7 +138,15 @@ public:
     FOnNPCDeleted OnNPCDeleted;
 
     UPROPERTY(BlueprintAssignable, Category = "AINPCEngine")
+    FOnNPCSpeak OnSpeak;
+
+    /** Legacy plain-string error (message only). Prefer OnApiError for structured handling. */
+    UPROPERTY(BlueprintAssignable, Category = "AINPCEngine")
     FOnNPCError OnError;
+
+    /** Structured error with HttpStatus, Code, Message, PaymentUrl. Handle "payment_required" (402) by directing the account owner to PaymentUrl. */
+    UPROPERTY(BlueprintAssignable, Category = "AINPCEngine")
+    FOnNPCApiError OnApiError;
 
 private:
     FString BaseUrl;
@@ -139,4 +155,7 @@ private:
 
     TSharedRef<IHttpRequest> CreateRequest(const FString& Verb, const FString& Path) const;
     void SendEventInternal(const FString& NpcId, const FString& EventType, const FString& PlayerId, const FString& Message, const FGameContext& Context);
+
+    /** Returns true when the response is a 2xx success. Otherwise parses the JSON error body and broadcasts OnError + OnApiError. */
+    bool CheckResponse(FHttpResponsePtr Res, bool bSuccess, const FString& Operation);
 };

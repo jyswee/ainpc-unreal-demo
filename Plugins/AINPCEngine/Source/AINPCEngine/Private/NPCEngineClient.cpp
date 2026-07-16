@@ -28,6 +28,56 @@ TSharedRef<IHttpRequest> UNPCEngineClient::CreateRequest(const FString& Verb, co
     return Request;
 }
 
+bool UNPCEngineClient::CheckResponse(FHttpResponsePtr Res, bool bSuccess, const FString& Operation)
+{
+    FAINPCError Error;
+
+    if (!bSuccess || !Res.IsValid())
+    {
+        Error.HttpStatus = 0;
+        Error.Code = TEXT("network_error");
+        Error.Message = FString::Printf(TEXT("%s request failed (no response)"), *Operation);
+        OnError.Broadcast(Error.Message);
+        OnApiError.Broadcast(Error);
+        return false;
+    }
+
+    const int32 StatusCode = Res->GetResponseCode();
+    if (StatusCode >= 200 && StatusCode < 300)
+    {
+        return true;
+    }
+
+    Error.HttpStatus = StatusCode;
+    Error.Message = FString::Printf(TEXT("%s failed with HTTP %d"), *Operation, StatusCode);
+
+    // Parse structured error body: { "error": "...", "code": "...", "paymentUrl"/"upgradeUrl": "..." }
+    TSharedPtr<FJsonObject> JsonObj;
+    TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Res->GetContentAsString());
+    if (FJsonSerializer::Deserialize(Reader, JsonObj) && JsonObj.IsValid())
+    {
+        FString Field;
+        if (JsonObj->TryGetStringField(TEXT("error"), Field))
+        {
+            Error.Message = Field;
+        }
+        if (JsonObj->TryGetStringField(TEXT("code"), Field))
+        {
+            Error.Code = Field;
+        }
+        // 402 payment_required carries "paymentUrl"; plan-limit errors carry "upgradeUrl"
+        if (JsonObj->TryGetStringField(TEXT("paymentUrl"), Field) ||
+            JsonObj->TryGetStringField(TEXT("upgradeUrl"), Field))
+        {
+            Error.PaymentUrl = Field;
+        }
+    }
+
+    OnError.Broadcast(Error.Message);
+    OnApiError.Broadcast(Error);
+    return false;
+}
+
 // ── NPC CRUD ────────────────────────────────────────────────────────────
 
 void UNPCEngineClient::CreateNPC(const FCreateNPCRequest& Request)
@@ -38,7 +88,7 @@ void UNPCEngineClient::CreateNPC(const FCreateNPCRequest& Request)
     HttpRequest->SetContentAsString(Body);
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("CreateNPC request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("CreateNPC"))) { return; }
         FAINPC NPC;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &NPC);
         OnNPCReceived.Broadcast(NPC);
@@ -51,7 +101,7 @@ void UNPCEngineClient::GetNPC(const FString& NpcId)
     auto HttpRequest = CreateRequest(TEXT("GET"), FString::Printf(TEXT("/api/npcs/%s"), *NpcId));
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("GetNPC request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("GetNPC"))) { return; }
         FAINPC NPC;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &NPC);
         OnNPCReceived.Broadcast(NPC);
@@ -64,7 +114,7 @@ void UNPCEngineClient::ListNPCs()
     auto HttpRequest = CreateRequest(TEXT("GET"), TEXT("/api/npcs"));
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("ListNPCs request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("ListNPCs"))) { return; }
 
         TArray<FAINPC> NPCs;
         TSharedPtr<FJsonValue> JsonValue;
@@ -89,7 +139,7 @@ void UNPCEngineClient::UpdateNPC(const FString& NpcId, const FString& JsonUpdate
     HttpRequest->SetContentAsString(JsonUpdates);
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("UpdateNPC request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("UpdateNPC"))) { return; }
         FAINPC NPC;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &NPC);
         OnNPCReceived.Broadcast(NPC);
@@ -102,7 +152,7 @@ void UNPCEngineClient::DeleteNPC(const FString& NpcId)
     auto HttpRequest = CreateRequest(TEXT("DELETE"), FString::Printf(TEXT("/api/npcs/%s"), *NpcId));
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("DeleteNPC request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("DeleteNPC"))) { return; }
         OnNPCDeleted.Broadcast();
     });
     HttpRequest->ProcessRequest();
@@ -118,7 +168,7 @@ void UNPCEngineClient::SendEvent(const FString& NpcId, const FGameEventRequest& 
     HttpRequest->SetContentAsString(Body);
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("SendEvent request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("SendEvent"))) { return; }
         FEventResult Result;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &Result);
         OnEventResult.Broadcast(Result);
@@ -147,7 +197,7 @@ void UNPCEngineClient::SendBatchEvents(const TArray<FBatchEventItem>& Events)
 
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("SendBatchEvents request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("SendBatchEvents"))) { return; }
         FBatchEventResult Result;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &Result);
         OnBatchResult.Broadcast(Result);
@@ -227,6 +277,30 @@ void UNPCEngineClient::NPCInteraction(const FString& NpcId, const FString& Other
     SendEventInternal(NpcId, TEXT("npc_interaction"), OtherNpcId, Message, Context);
 }
 
+// ── Voice (TTS) ─────────────────────────────────────────────────────────
+
+void UNPCEngineClient::Speak(const FString& NpcId, const FString& Text)
+{
+    auto HttpRequest = CreateRequest(TEXT("POST"), FString::Printf(TEXT("/api/npcs/%s/speak"), *NpcId));
+
+    TSharedPtr<FJsonObject> BodyObj = MakeShareable(new FJsonObject());
+    BodyObj->SetStringField(TEXT("text"), Text);
+
+    FString Body;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
+    FJsonSerializer::Serialize(BodyObj.ToSharedRef(), Writer);
+    HttpRequest->SetContentAsString(Body);
+
+    HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
+    {
+        if (!CheckResponse(Res, bSuccess, TEXT("Speak"))) { return; }
+        FSpeakResponse Speech;
+        FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &Speech);
+        OnSpeak.Broadcast(Speech);
+    });
+    HttpRequest->ProcessRequest();
+}
+
 // ── Generation ──────────────────────────────────────────────────────────
 
 void UNPCEngineClient::GenerateNPC(const FGenerateNPCRequest& Request)
@@ -237,7 +311,7 @@ void UNPCEngineClient::GenerateNPC(const FGenerateNPCRequest& Request)
     HttpRequest->SetContentAsString(Body);
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("GenerateNPC request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("GenerateNPC"))) { return; }
         FAINPC NPC;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &NPC);
         OnNPCReceived.Broadcast(NPC);
@@ -253,7 +327,7 @@ void UNPCEngineClient::GenerateBatch(const FGenerateBatchRequest& Request)
     HttpRequest->SetContentAsString(Body);
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("GenerateBatch request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("GenerateBatch"))) { return; }
         FGenerateBatchResponse Result;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &Result);
         OnBatchGenerated.Broadcast(Result);
@@ -268,7 +342,7 @@ void UNPCEngineClient::GetStats()
     auto HttpRequest = CreateRequest(TEXT("GET"), TEXT("/api/stats"));
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("GetStats request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("GetStats"))) { return; }
         FStatsResponse Stats;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &Stats);
         OnStatsReceived.Broadcast(Stats);
@@ -278,10 +352,14 @@ void UNPCEngineClient::GetStats()
 
 void UNPCEngineClient::Health()
 {
-    auto HttpRequest = CreateRequest(TEXT("GET"), TEXT("/api/health"));
+    // Public endpoint — no auth headers required
+    TSharedRef<IHttpRequest> HttpRequest = FHttpModule::Get().CreateRequest();
+    HttpRequest->SetURL(BaseUrl + TEXT("/api/health"));
+    HttpRequest->SetVerb(TEXT("GET"));
+    HttpRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     HttpRequest->OnProcessRequestComplete().BindLambda([this](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
     {
-        if (!bSuccess || !Res.IsValid()) { OnError.Broadcast(TEXT("Health request failed")); return; }
+        if (!CheckResponse(Res, bSuccess, TEXT("Health"))) { return; }
         FHealthResponse HealthResp;
         FJsonObjectConverter::JsonObjectStringToUStruct(Res->GetContentAsString(), &HealthResp);
         OnHealthReceived.Broadcast(HealthResp);

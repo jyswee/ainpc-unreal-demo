@@ -13,8 +13,9 @@ void UNPCWebSocketClient::Connect(const FString& BaseUrl, const FString& ApiKey,
 
     Socket->OnConnected().AddLambda([this]()
     {
+        // Socket is open; OnConnected broadcasts once the server sends its
+        // "connected" handshake message (see HandleMessage).
         bIsConnected = true;
-        OnConnected.Broadcast();
     });
 
     Socket->OnConnectionError().AddLambda([this](const FString& Error)
@@ -134,9 +135,58 @@ void UNPCWebSocketClient::HandleMessage(const FString& Message)
             OnResponse.Broadcast(Result);
         }
     }
+    else if (Type == TEXT("connected"))
+    {
+        FString GameId;
+        JsonObj->TryGetStringField(TEXT("gameId"), GameId);
+        OnConnected.Broadcast(GameId);
+    }
+    else if (Type == TEXT("subscribed"))
+    {
+        OnSubscribed.Broadcast(ParseNpcIds(JsonObj));
+    }
+    else if (Type == TEXT("unsubscribed"))
+    {
+        OnUnsubscribed.Broadcast(ParseNpcIds(JsonObj));
+    }
+    else if (Type == TEXT("state_update"))
+    {
+        FNPCStateUpdate Update;
+        JsonObj->TryGetStringField(TEXT("npcId"), Update.NpcId);
+
+        const TSharedPtr<FJsonObject>* DataObj;
+        if (JsonObj->TryGetObjectField(TEXT("data"), DataObj))
+        {
+            const TSharedPtr<FJsonObject>* MoodObj;
+            if ((*DataObj)->TryGetObjectField(TEXT("mood"), MoodObj))
+            {
+                FJsonObjectConverter::JsonObjectToUStruct((*MoodObj).ToSharedRef(), &Update.Mood);
+            }
+            (*DataObj)->TryGetStringField(TEXT("location"), Update.Location);
+        }
+        OnStateUpdate.Broadcast(Update);
+    }
     else if (Type == TEXT("error"))
     {
         FString ErrorMsg = JsonObj->GetStringField(TEXT("message"));
         OnError.Broadcast(FString::Printf(TEXT("Server error: %s"), *ErrorMsg));
     }
+}
+
+TArray<FString> UNPCWebSocketClient::ParseNpcIds(const TSharedPtr<FJsonObject>& JsonObj)
+{
+    TArray<FString> NpcIds;
+    const TArray<TSharedPtr<FJsonValue>>* IdsArray;
+    if (JsonObj->TryGetArrayField(TEXT("npcIds"), IdsArray))
+    {
+        for (const auto& IdValue : *IdsArray)
+        {
+            FString Id;
+            if (IdValue->TryGetString(Id))
+            {
+                NpcIds.Add(Id);
+            }
+        }
+    }
+    return NpcIds;
 }

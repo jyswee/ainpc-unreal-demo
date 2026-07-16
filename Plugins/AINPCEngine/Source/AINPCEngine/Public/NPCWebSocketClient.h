@@ -5,8 +5,13 @@
 #include "IWebSocket.h"
 #include "NPCWebSocketClient.generated.h"
 
+class FJsonObject;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWSResponse, FEventResult, Result);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnWSConnected);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWSConnected, FString, GameId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWSSubscribed, const TArray<FString>&, NpcIds);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWSUnsubscribed, const TArray<FString>&, NpcIds);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWSStateUpdate, FNPCStateUpdate, StateUpdate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWSDisconnected, FString, Reason);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWSError, FString, Error);
 
@@ -34,11 +39,25 @@ public:
     UFUNCTION(BlueprintCallable, Category = "AINPCEngine|WebSocket")
     void Unsubscribe(const TArray<FString>& NpcIds);
 
+    /** NPC response to an event sent over the socket */
     UPROPERTY(BlueprintAssignable, Category = "AINPCEngine|WebSocket")
     FOnWSResponse OnResponse;
 
+    /** Server confirmed the session ("connected" message) — safe to subscribe/send */
     UPROPERTY(BlueprintAssignable, Category = "AINPCEngine|WebSocket")
     FOnWSConnected OnConnected;
+
+    /** Server acknowledged a subscribe — NpcIds is the full current subscription list */
+    UPROPERTY(BlueprintAssignable, Category = "AINPCEngine|WebSocket")
+    FOnWSSubscribed OnSubscribed;
+
+    /** Server acknowledged an unsubscribe — NpcIds is the remaining subscription list */
+    UPROPERTY(BlueprintAssignable, Category = "AINPCEngine|WebSocket")
+    FOnWSUnsubscribed OnUnsubscribed;
+
+    /** Push update when a subscribed NPC's mood or location changes */
+    UPROPERTY(BlueprintAssignable, Category = "AINPCEngine|WebSocket")
+    FOnWSStateUpdate OnStateUpdate;
 
     UPROPERTY(BlueprintAssignable, Category = "AINPCEngine|WebSocket")
     FOnWSDisconnected OnDisconnected;
@@ -51,4 +70,5 @@ private:
     bool bIsConnected = false;
 
     void HandleMessage(const FString& Message);
+    static TArray<FString> ParseNpcIds(const TSharedPtr<FJsonObject>& JsonObj);
 };
