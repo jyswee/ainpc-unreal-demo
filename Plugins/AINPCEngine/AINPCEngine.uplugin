@@ -1,23 +1,23 @@
 {
-  "FileVersion": 3,
-  "Version": 1,
-  "VersionName": "1.0",
-  "FriendlyName": "AINPCEngine",
-  "Description": "AI-powered NPC engine with persistent memory and dynamic personalities.",
-  "Category": "Game Features",
-  "CreatedBy": "Tyga.Cloud Ltd",
-  "CreatedByURL": "https://ainpcengine.com",
-  "DocsURL": "https://ainpcengine.com/docs",
-  "MarketplaceURL": "",
-  "CanContainContent": false,
-  "IsBetaVersion": false,
-  "IsExperimentalVersion": false,
-  "Installed": false,
-  "Modules": [
-    {
-      "Name": "AINPCEngine",
-      "Type": "Runtime",
-      "LoadingPhase": "Default"
-    }
-  ]
+ "FileVersion": 3,
+ "Version": 1,
+ "VersionName": "1.0",
+ "FriendlyName": "AINPCEngine",
+ "Description": "AI-powered NPC engine with persistent memory and dynamic personalities.",
+ "Category": "Game Features",
+ "CreatedBy": "jyswee",
+ "CreatedByURL": "https://ainpcengine.com",
+ "DocsURL": "https://ainpcengine.com/docs",
+ "MarketplaceURL": "",
+ "CanContainContent": false,
+ "IsBetaVersion": false,
+ "IsExperimentalVersion": false,
+ "Installed": false,
+ "Modules": [
+  {
+   "Name": "AINPCEngine",
+   "Type": "Runtime",
+   "LoadingPhase": "Default"
+  }
+ ]
 }
